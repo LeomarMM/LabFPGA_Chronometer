@@ -9,5 +9,6 @@ db
 incremental_db
 output_files/*
 !output_files/LabFPGA.cdf
+!output_files/LabFPGA.sof
 simulation
 work
