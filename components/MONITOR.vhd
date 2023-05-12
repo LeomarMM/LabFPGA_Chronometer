@@ -132,6 +132,9 @@ architecture behavioral of MONITOR is
 	signal w_OUTPUT_ENA	:	std_logic;
 	signal w_RECV			:	std_logic;
 	signal w_RTS			:	std_logic;
+	signal w_WDT_ENA		:	std_logic;
+	signal w_WDT_EQ		:	std_logic;
+	signal w_WDT_RST		:	std_logic;
 	signal r_BUFFER		:	std_logic_vector(buffer_size-1 downto 0) := (OTHERS => '0');
 	signal r_MODE			:	std_logic := '0';
 	signal r_OUTPUT		:	std_logic_vector(output_size-1 downto 0) := (OTHERS => '0');
@@ -166,6 +169,20 @@ begin
 		i_RST	=>	w_CNT2_RST,
 		i_ENA => w_CNT2_ENA,
 		o_EQ	=> w_CNT2_EQ
+	);
+	
+	WDT	:	COUNTER
+	generic map
+	(
+		max_count	=> clock,
+		reverse		=> '0'
+	)
+	port map
+	(
+		i_CLK	=>	"not"(i_CLK),
+		i_RST	=>	w_WDT_RST,
+		i_ENA => w_WDT_ENA,
+		o_EQ	=> w_WDT_EQ
 	);
 
 	U1	: CRC8
@@ -254,10 +271,14 @@ begin
 		elsif(rising_edge(i_CLK)) then
 			case t_STATE is
 				when IDLE =>
-					if(w_RECV = '1') then
-						t_STATE <= RECV;
+					if(w_WDT_EQ = '1') then
+						t_STATE <= RESET_MACH;
 					else
-						t_STATE <= IDLE;
+						if(w_RECV = '1') then
+							t_STATE <= RECV;
+						else
+							t_STATE <= IDLE;
+						end if;
 					end if;
 				when RECV =>
 					if(w_RECV = '0') then
@@ -336,10 +357,14 @@ begin
 						t_STATE <= PRE_CRC;
 					end if;
 				when WAIT_RESPONSE =>
-					if(w_RECV = '1') then
-						t_STATE <= RECV_RESPONSE;
+					if(w_WDT_EQ = '1') then
+						t_STATE <= RESET_MACH;
 					else
-						t_STATE <= WAIT_RESPONSE;
+						if(w_RECV = '1') then
+							t_STATE <= RECV_RESPONSE;
+						else
+							t_STATE <= WAIT_RESPONSE;
+						end if;
 					end if;
 				when RECV_RESPONSE =>
 					if(w_RECV = '0') then
@@ -368,16 +393,18 @@ begin
 	w_EQ <= '1' when r_BUFFER(7 downto 0) = w_CRC_OUT else '0';
 
 	-- Fios Dependentes de Estados
-	w_BUF_RST <= '1'	when t_STATE = RESET_MACH else '0';
-	w_CRC_ENA <= '1'	when t_STATE = CRC_FEED else '0';
-	w_CRC_RST <= '1'	when t_STATE = PRE_CRC or
+	w_BUF_RST <=	'1'	when t_STATE = RESET_MACH else '0';
+	w_CRC_ENA <=	'1'	when t_STATE = CRC_FEED else '0';
+	w_CRC_RST <=	'1'	when t_STATE = PRE_CRC or
 							t_STATE = RESET_MACH else '0';
-	w_CNT1_ENA <= '1' when t_STATE = CRC_COUNT else '0';
-	w_CNT1_RST <= '1' when t_STATE = PRE_CRC or
+	w_CNT1_ENA <=	'1' when t_STATE = CRC_COUNT else '0';
+	w_CNT1_RST <=	'1' when t_STATE = PRE_CRC or
 							t_STATE = RESET_MACH else '0';
-	w_CNT2_ENA <= '1' when t_STATE = COUNT_SENT else '0';
-	w_CNT2_RST <= '1' when t_STATE = COUNT_CLEAR or
+	w_CNT2_ENA <=	'1' when t_STATE = COUNT_SENT else '0';
+	w_CNT2_RST <=	'1' when t_STATE = COUNT_CLEAR or
 							t_STATE = RESET_MACH else '0';
+	w_WDT_ENA <=	'1' when (t_STATE = IDLE and w_CNT1_VAL /= buffer_size-1) or t_STATE = WAIT_RESPONSE else '0';
+	w_WDT_RST <=	'1' when t_STATE = RECV or t_STATE = RECV_RESPONSE or t_STATE = RESET_MACH else '0';
 	w_LS	<= '0' when t_STATE = START_RESPONSE else '1';
 	w_OUTPUT_ENA <= '1' when t_STATE = FILL_OUTPUT and w_EQ = '1' else '0';
 
